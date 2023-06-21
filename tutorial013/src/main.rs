@@ -11,7 +11,7 @@ fn main() {
 
 enum Access {
     Admin,
-    Manager,
-    User,
-    Guest
+    _Manager,
+    _User,
+    _Guest
 }
