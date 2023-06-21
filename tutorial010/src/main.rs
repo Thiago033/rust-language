@@ -2,6 +2,9 @@ fn main() {
     //let go = Direction::Left;
 
     show_direction(Direction::Left);
+    show_direction(Direction::Right);
+    show_direction(Direction::Up);
+    show_direction(Direction::Down);
 }
 enum Direction {
     Left,
