@@ -12,3 +12,12 @@ fn main() {
     println!("{int_input}");
     
 }
+
+x + y
+//or
+//return x + y;
+
+// let result = x + y;
+// if result > 10 {
+//     return result - 10;
+// }
