@@ -1,12 +1,10 @@
 use ggez::{Context, GameResult, ContextBuilder};
 use ggez::event;
-use ggez::graphics::{self, Drawable};
+use ggez::graphics::{self, Drawable, PxScale};
 use ggez::glam::Vec2;
 use ggez::input::keyboard::{KeyCode, KeyInput};
 
 use rand::{thread_rng, Rng};
-
-type Point2 = Vec2;
 
 // Pads Consts
 const PAD_HEIGHT: f32 = 100.0;
@@ -50,9 +48,9 @@ fn random_ball_vec(vec: &mut ggez::glam::Vec2, x: f32, y: f32) {
 }
 
 struct MainState {
-    player_1_pos: Point2,
-    player_2_pos: Point2,
-    ball_position: Point2,
+    player_1_pos: Vec2,
+    player_2_pos: Vec2,
+    ball_position: Vec2,
     ball_velocity: Vec2,
     player_1_score: i32,
     player_2_score: i32,
@@ -141,8 +139,10 @@ impl event::EventHandler for MainState {
     }
 
     // Pads Movement
+    // by default exit the game if the escape key is pressed.
     fn key_down_event(&mut self, _ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
 
+        // synchronize frames and pads/ball movement
         // Passing delta time as f32 to multiply with pad_speed
         let delta_time = _ctx.time.delta().as_secs_f32();
 
@@ -227,10 +227,18 @@ impl event::EventHandler for MainState {
         );
 
         // Drawing Score HUD
-        let score_text = ggez::graphics::Text::new(format!("{}   {}", self.player_1_score, self.player_2_score));
-        let score_pos = ggez::glam::Vec2::new(SCREEN_WIDTH_HALF - 50.0, 40.0);
+        let mut score_text = graphics::Text::new(format!("{}   {}", self.player_1_score, self.player_2_score));
 
-        let draw_param = ggez::graphics::DrawParam::default().dest(score_pos);
+        // Text Size
+        score_text.set_scale(PxScale::from(40.0));
+        
+        // Text Position
+        let score_pos = ggez::glam::Vec2::new(SCREEN_WIDTH_HALF - 50.0, 40.0);
+        
+        let draw_param = graphics::DrawParam::default()
+            .dest(score_pos)
+            .color(ggez::graphics::Color::BLACK);
+
         canvas.draw(
             &score_text, 
             draw_param
