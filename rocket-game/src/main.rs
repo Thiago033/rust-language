@@ -96,6 +96,9 @@ fn create_player() -> Actor {
     }
 }
 
+// **************************
+// Rocket Physics
+// **************************
 fn player_handle_input(actor: &mut Actor, input: &InputState, dt: f32) {
     actor.facing += dt * PLAYER_TURN_RATE * input.xaxis;
 
@@ -110,7 +113,6 @@ fn player_thrust(actor: &mut Actor, dt: f32) {
     actor.velocity += thrust_vector * (dt);
 }
 
-
 fn update_actor_position(actor: &mut Actor, dt: f32) {
     // Clamp the velocity to the max efficiently
     let norm_sq = actor.velocity.length_squared();
@@ -122,9 +124,8 @@ fn update_actor_position(actor: &mut Actor, dt: f32) {
     actor.facing += actor.ang_vel;
 }
 
-// Takes an actor and wraps its position to the bounds of the
-// screen, so if it goes off the left side of the screen it
-// will re-enter on the right side and so on.
+// Takes an actor and wraps its position to the bounds of the screen, 
+// so if it goes off the left side of the screen it will re-enter on the right side and so on.
 fn wrap_actor_position(actor: &mut Actor, sx: f32, sy: f32) {
     // Wrap screen
     let screen_x_bounds = sx / 2.0;
@@ -155,7 +156,6 @@ fn world_to_screen_coords(screen_width: f32, screen_height: f32, pos: Point2) ->
     Point2::new(x, y)
 }
 
-
 struct Assets {
     player_image: graphics::Image,
 }
@@ -174,8 +174,8 @@ impl Assets {
 }
 
 // **********************************************************************
-// keeps track of the user's input state so that 
-// we turn keyboard events into state-based commands
+// Keeps track of the user's input state 
+// Turn keyboard events into state-based commands
 // **********************************************************************
 #[derive(Debug)]
 struct InputState {
@@ -197,12 +197,8 @@ impl Default for InputState {
 // Keeps track of everything we need for actually running the game.
 // **********************************************************************
 struct MainState {
-    // because we want to screenshot, we need to ensure we're rendering to Rgba8
     screen: graphics::ScreenImage,
-
     player: Actor,
-    // level: i32,
-    // score: i32,
     assets: Assets,
     screen_width: f32,
     screen_height: f32,
@@ -212,9 +208,7 @@ struct MainState {
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        println!("Game resource path: {:?}", ctx.fs);
-
-        // Seed for RNG
+        // RNG Seed
         let mut seed: [u8; 8] = [0; 8];
         getrandom::getrandom(&mut seed[..]).expect("Could not create RNG seed");
         // let mut rng = Rand32::new(u64::from_ne_bytes(seed));
