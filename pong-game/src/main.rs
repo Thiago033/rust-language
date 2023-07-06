@@ -80,6 +80,8 @@ impl event::EventHandler for MainState {
         // println!("PLAYER_1 = X: {}, Y:{}", self.player_1_pos.x, self.player_1_pos.y);
         // println!("PLAYER_2 = X: {}, Y:{}", self.player_2_pos.x, self.player_2_pos.y);
         // println!("BALL     = X: {}, Y:{}", self.ball_position.x, self.ball_position.y);
+        // println!("BALL VELOCITY = {}:", self.ball_velocity.x);
+
 
         // Ball movement
         let delta_time = ctx.time.delta().as_secs_f32();
