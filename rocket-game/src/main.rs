@@ -1,15 +1,13 @@
 use ggez::conf;
 use ggez::event::{self, EventHandler};
 use ggez::glam::*;
-use ggez::graphics::{self, Color};
+use ggez::graphics::{self, Color, Rect};
 use ggez::input::keyboard::KeyCode;
 use ggez::{Context, ContextBuilder, GameResult};
 use ggez::input::keyboard::KeyInput;
 
-// Not using
-use oorandom::Rand32;
-
 use std::env;
+use std::f32::consts::PI;
 use std::path;
 
 type Point2 = Vec2;
@@ -22,16 +20,17 @@ type Vector2 = Vec2;
 const PLAYER_THRUST: f32 = 100.0;
 // Rotation in radians per second.
 const PLAYER_TURN_RATE: f32 = 3.0;
-
-// Not using (not handle any collision)
 // Player Box size
-const PLAYER_BBOX: f32 = 12.0;
+const PLAYER_BBOX: Vec2 = Vec2::new(37.0, 64.0);
+//
+const MAX_IMPACT_VELOCITY: f32 = 75.0;
 
 // **********************************************************************
 // Game Generic Consts
 // **********************************************************************
-const MAX_PHYSICS_VEL: f32 = 250.0;
 const DESIRED_FPS: u32 = 60;
+
+const SCREEN_SIZE: Vec2 = Vec2::new(800.0, 600.0);
 
 // Actor type
 #[derive(Debug)]
@@ -45,8 +44,9 @@ struct Actor {
     pos: Point2,
     facing: f32,
     velocity: Vector2,
-    ang_vel: f32,
-    bbox_size: f32,
+    // ang_vel: f32,
+    // bbox_size: Vec2,
+    rect: Rect
 }
 
 // **********************************************************************
@@ -56,7 +56,7 @@ struct Actor {
 fn vec_from_angle(angle: f32) -> Vector2 {
     let vx = angle.sin();
     let vy = angle.cos();
-    Vector2::new(vx, vy)
+    Vector2::new(vx, -vy)
 }
 
 // Draw actor
@@ -64,11 +64,8 @@ fn draw_actor(
     assets: &mut Assets,
     canvas: &mut graphics::Canvas,
     actor: &Actor,
-    world_coords: (f32, f32),
 ) {
-    let (screen_w, screen_h) = world_coords;
-
-    let pos = world_to_screen_coords(screen_w, screen_h, actor.pos);
+    let pos = actor.pos;
 
     let image = assets.actor_image(actor);
 
@@ -88,72 +85,55 @@ fn draw_actor(
 fn create_player() -> Actor {
     Actor {
         tag: ActorType::Player,
-        pos: Point2::ZERO,
+        pos: SCREEN_SIZE * 0.5,
         facing: 0.,
         velocity: Vector2::ZERO,
-        ang_vel: 0.,
-        bbox_size: PLAYER_BBOX,
+        // ang_vel: 0.,
+        // bbox_size: PLAYER_BBOX,
+        rect: Rect::new(0.0, 0.0, PLAYER_BBOX.x, PLAYER_BBOX.y)
     }
 }
 
 // **************************
 // Rocket Physics
 // **************************
-fn player_handle_input(actor: &mut Actor, input: &InputState, dt: f32) {
-    actor.facing += dt * PLAYER_TURN_RATE * input.xaxis;
+fn player_handle_input(rocket: &mut Actor, input: &InputState, dt: f32) {
+    rocket.facing += dt * PLAYER_TURN_RATE * input.xaxis;
+
+    rocket.facing = rocket.facing % (2.0 * PI);
 
     if input.yaxis > 0.0 {
-        player_thrust(actor, dt);
+        player_thrust(rocket, dt);
     }
 }
 
-fn player_thrust(actor: &mut Actor, dt: f32) {
-    let direction_vector = vec_from_angle(actor.facing);
+fn player_thrust(rocket: &mut Actor, dt: f32) {
+    let direction_vector = vec_from_angle(rocket.facing);
     let thrust_vector = direction_vector * (PLAYER_THRUST);
-    actor.velocity += thrust_vector * (dt);
+
+    rocket.velocity += thrust_vector * (dt);
 }
 
-fn update_actor_position(actor: &mut Actor, dt: f32) {
-    // Clamp the velocity to the max efficiently
-    let norm_sq = actor.velocity.length_squared();
-    if norm_sq > MAX_PHYSICS_VEL.powi(2) {
-        actor.velocity = actor.velocity / norm_sq.sqrt() * MAX_PHYSICS_VEL;
+fn update_actor_position(rocket: &mut Actor, dt: f32) {
+    rocket.velocity.y += 10.0 * dt;
+
+    rocket.pos += rocket.velocity * dt;
+
+    rocket.rect.x = rocket.pos.x - rocket.rect.w / 2.0;
+    rocket.rect.y = rocket.pos.y - rocket.rect.h / 2.0;
+}
+
+fn check_collision(rocket: &mut Actor, ground: graphics::Rect) {
+    if ground.overlaps(&rocket.rect) {
+
+        if rocket.velocity.length() >= MAX_IMPACT_VELOCITY {
+            println!("EXPLODIDO!");
+        }
+
+        rocket.velocity.y *= -0.5;
+        rocket.velocity.x *= 0.99;
+        rocket.pos.y = ground.y - rocket.rect.h / 2.0;
     }
-    let dv = actor.velocity * dt;
-    actor.pos += dv;
-    actor.facing += actor.ang_vel;
-}
-
-// Takes an actor and wraps its position to the bounds of the screen, 
-// so if it goes off the left side of the screen it will re-enter on the right side and so on.
-fn wrap_actor_position(actor: &mut Actor, sx: f32, sy: f32) {
-    // Wrap screen
-    let screen_x_bounds = sx / 2.0;
-    let screen_y_bounds = sy / 2.0;
-    if actor.pos.x > screen_x_bounds {
-        actor.pos -= Vec2::new(sx, 0.0);
-    } else if actor.pos.x < -screen_x_bounds {
-        actor.pos += Vec2::new(sx, 0.0);
-    };
-    if actor.pos.y > screen_y_bounds {
-        actor.pos -= Vec2::new(0.0, sy);
-    } else if actor.pos.y < -screen_y_bounds {
-        actor.pos += Vec2::new(0.0, sy);
-    }
-}
-
-// fn handle_timed_life(actor: &mut Actor, dt: f32) {
-//     actor.life -= dt;
-// }
-
-// Translates the world coordinate system, which
-// has Y pointing up and the origin at the center,
-// to the screen coordinate system, which has Y
-// pointing downward and the origin at the top-left,
-fn world_to_screen_coords(screen_width: f32, screen_height: f32, pos: Point2) -> Point2 {
-    let x = pos.x + screen_width / 2.0;
-    let y = screen_height - (pos.y + screen_height / 2.0);
-    Point2::new(x, y)
 }
 
 struct Assets {
@@ -200,25 +180,18 @@ struct MainState {
     screen: graphics::ScreenImage,
     player: Actor,
     assets: Assets,
-    screen_width: f32,
-    screen_height: f32,
     input: InputState,
-    rng: Rand32,
+    ground_rect: Rect
 }
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        // RNG Seed
-        let mut seed: [u8; 8] = [0; 8];
-        getrandom::getrandom(&mut seed[..]).expect("Could not create RNG seed");
-        // let mut rng = Rand32::new(u64::from_ne_bytes(seed));
-        let rng = Rand32::new(u64::from_ne_bytes(seed));
-
-
         let assets = Assets::new(ctx)?;
         let player = create_player();
+        
+        // Size of both pads
+        let ground_rect = graphics::Rect::new(0.0, 580.0, 600.0, 20.0);
 
-        let (width, height) = ctx.gfx.drawable_size();
         let screen =
             graphics::ScreenImage::new(ctx, graphics::ImageFormat::Rgba8UnormSrgb, 1., 1., 1);
 
@@ -226,10 +199,8 @@ impl MainState {
             screen,
             player,
             assets,
-            screen_width: width,
-            screen_height: height,
             input: InputState::default(),
-            rng
+            ground_rect
         };
 
         Ok(s)
@@ -250,11 +221,14 @@ impl EventHandler for MainState {
             let seconds = 1.0 / (DESIRED_FPS as f32);
             
             // Update the player state based on the user input.
-            player_handle_input(&mut self.player, &self.input, seconds); 
+            player_handle_input(&mut self.player, &self.input, seconds);
 
             // Update the physics for player
             update_actor_position(&mut self.player, seconds);
-            wrap_actor_position(&mut self.player, self.screen_width, self.screen_height);
+            
+            //wrap_actor_position(&mut self.player, self.screen_width, self.screen_height);
+
+            check_collision(&mut self.player, self.ground_rect);
         }
 
         Ok(())
@@ -267,11 +241,26 @@ impl EventHandler for MainState {
         // Loop over all objects
         {
             let assets = &mut self.assets;
-            let coords = (self.screen_width, self.screen_height);
 
             let p = &self.player;
-            draw_actor(assets, &mut canvas, p, coords);
+            draw_actor(assets, &mut canvas, p);
+
         }
+
+        // Create mesh for the pad
+        let ground_mesh = graphics::Mesh::new_rectangle(
+            ctx,
+            graphics::DrawMode::fill(),
+            self.ground_rect,
+            graphics::Color::WHITE,
+        )?;
+        
+        // Drawing pads
+        let draw_param = graphics::DrawParam::default().dest(Vec2::ZERO);
+        canvas.draw(
+            &ground_mesh,
+            draw_param
+        );
 
         canvas.finish(ctx)?;
 
@@ -302,7 +291,10 @@ impl EventHandler for MainState {
             Some(KeyCode::Up) => {
                 self.input.yaxis = 0.0;
             }
-            Some(KeyCode::Left | KeyCode::Right) => {
+            Some(KeyCode::Left) => {
+                self.input.xaxis = 0.0;
+            }
+            Some(KeyCode::Right) => {
                 self.input.xaxis = 0.0;
             }
             _ => (), // Do nothing
