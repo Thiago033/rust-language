@@ -123,11 +123,12 @@ fn update_actor_position(rocket: &mut Actor, dt: f32) {
     rocket.rect.y = rocket.pos.y - rocket.rect.h / 2.0;
 }
 
-fn check_collision(rocket: &mut Actor, ground: graphics::Rect) {
+fn check_collision(rocket: &mut Actor, ground: graphics::Rect, ctx: &mut Context) {
     if ground.overlaps(&rocket.rect) {
 
         if rocket.velocity.length() >= MAX_IMPACT_VELOCITY {
-            println!("EXPLODIDO!");
+                println!("Game over!");
+                ctx.request_quit();
         }
 
         rocket.velocity.y *= -0.5;
@@ -226,9 +227,9 @@ impl EventHandler for MainState {
             // Update the physics for player
             update_actor_position(&mut self.player, seconds);
             
-            //wrap_actor_position(&mut self.player, self.screen_width, self.screen_height);
+            // wrap_actor_position(&mut self.player, self.screen_width, self.screen_height);
 
-            check_collision(&mut self.player, self.ground_rect);
+            check_collision(&mut self.player, self.ground_rect, ctx);
         }
 
         Ok(())
