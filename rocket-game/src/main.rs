@@ -22,8 +22,10 @@ const PLAYER_THRUST: f32 = 100.0;
 const PLAYER_TURN_RATE: f32 = 3.0;
 // Player Box size
 const PLAYER_BBOX: Vec2 = Vec2::new(37.0, 64.0);
-//
+
 const MAX_IMPACT_VELOCITY: f32 = 75.0;
+
+const GRAVITY_ACCELERATION: f32 = 3.0;
 
 // **********************************************************************
 // Game Generic Consts
@@ -190,7 +192,6 @@ impl MainState {
         let assets = Assets::new(ctx)?;
         let player = create_player();
         
-        // Size of both pads
         let ground_rect = graphics::Rect::new(0.0, 580.0, 600.0, 20.0);
 
         let screen =
@@ -219,7 +220,7 @@ impl EventHandler for MainState {
         // println!("PLAYER POS Y: {}", self.player.pos.y);
 
         while ctx.time.check_update_time(DESIRED_FPS) {
-            let seconds = 1.0 / (DESIRED_FPS as f32);
+            let seconds = GRAVITY_ACCELERATION / (DESIRED_FPS as f32);
             
             // Update the player state based on the user input.
             player_handle_input(&mut self.player, &self.input, seconds);
