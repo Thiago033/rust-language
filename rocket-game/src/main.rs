@@ -1,53 +1,41 @@
+use ggez::{Context, ContextBuilder, GameResult};
 use ggez::conf;
 use ggez::event::{self, EventHandler};
-use ggez::glam::*;
+use ggez::glam::Vec2;
 use ggez::graphics::{self, Color, Rect, PxScale, Text};
-use ggez::input::keyboard::KeyCode;
-use ggez::{Context, ContextBuilder, GameResult};
-use ggez::input::keyboard::KeyInput;
+use ggez::input::keyboard::{KeyCode, KeyInput};
 
 use std::env;
 use std::f32::consts::PI;
 use std::path;
 
-type Point2 = Vec2;
-type Vector2 = Vec2;
-
 // **********************************************************************
 // Player Consts
 // **********************************************************************
 // Acceleration in pixels per second.
-const PLAYER_THRUST: f32 = 50.0;
+const ROCKET_THRUST: f32 = 50.0;
+// Rocket fuel
+const ROCKET_FUEL: f32 = 100.0;
 // Rotation in radians per second.
-const PLAYER_TURN_RATE: f32 = 1.5;
+const ROCKET_TURN_RATE: f32 = 1.5;
 // Player Box size
-const PLAYER_BBOX: Vec2 = Vec2::new(37.0, 64.0);
+const ROCKET_BBOX: Vec2 = Vec2::new(37.0, 64.0);
 
-const MAX_IMPACT_VELOCITY: f32 = 75.0;
-
-const GRAVITY_ACCELERATION: f32 = 3.0;
 
 // **********************************************************************
 // Game Generic Consts
 // **********************************************************************
 const DESIRED_FPS: u32 = 60;
-
 const SCREEN_SIZE: Vec2 = Vec2::new(800.0, 600.0);
-
-// Actor type
-#[derive(Debug)]
-enum ActorType {
-    Player,
-}
+const MAX_IMPACT_VELOCITY: f32 = 75.0;
+const GRAVITY_ACCELERATION: f32 = 3.0;
 
 #[derive(Debug)]
 struct Actor {
-    tag: ActorType,
-    pos: Point2,
+    pos: Vec2,
     facing: f32,
-    velocity: Vector2,
-    // ang_vel: f32,
-    // bbox_size: Vec2,
+    velocity: Vec2,
+    fuel: f32,
     rect: Rect
 }
 
@@ -55,26 +43,22 @@ struct Actor {
 // Utility functions.
 // **********************************************************************
 // Create a unit vector representing the given angle (in radians)
-fn vec_from_angle(angle: f32) -> Vector2 {
-    let vx = angle.sin();
-    let vy = angle.cos();
-    Vector2::new(vx, -vy)
+fn vec_from_angle(angle: f32) -> Vec2 {
+    let x = angle.sin();
+    let y = angle.cos();
+    Vec2::new(x, -y)
 }
 
 // Draw actor
-fn draw_actor(
-    assets: &mut Assets,
-    canvas: &mut graphics::Canvas,
-    actor: &Actor,
-) {
+fn draw_actor(assets: &mut Assets, canvas: &mut graphics::Canvas, actor: &Actor) {
     let pos = actor.pos;
 
-    let image = assets.actor_image(actor);
+    let image = assets.rocket_image();
 
     let drawparams = graphics::DrawParam::new()
         .dest(pos)
         .rotation(actor.facing)
-        .offset(Point2::new(0.5, 0.5));
+        .offset(Vec2::new(0.5, 0.5));
 
     // Draw on screen
     canvas.draw(image, drawparams);
@@ -86,13 +70,13 @@ fn draw_actor(
 // Create PLayer
 fn create_player() -> Actor {
     Actor {
-        tag: ActorType::Player,
         pos: SCREEN_SIZE * 0.5,
         facing: 0.,
-        velocity: Vector2::ZERO,
+        velocity: Vec2::ZERO,
+        fuel: ROCKET_FUEL,
         
         // Rect object stays "inside" player sprite to check collisions
-        rect: Rect::new(0.0, 0.0, PLAYER_BBOX.x, PLAYER_BBOX.y)
+        rect: Rect::new(0.0, 0.0, ROCKET_BBOX.x, ROCKET_BBOX.y)
     }
 }
 
@@ -100,20 +84,25 @@ fn create_player() -> Actor {
 // Rocket Physics
 // **************************
 fn player_handle_input(rocket: &mut Actor, input: &InputState, dt: f32) {
-    rocket.facing += dt * PLAYER_TURN_RATE * input.xaxis;
-
+    // Rocket rotation
+    rocket.facing += dt * ROCKET_TURN_RATE * input.xaxis;
     rocket.facing = rocket.facing % (2.0 * PI);
 
-    if input.yaxis > 0.0 {
-        player_thrust(rocket, dt);
+    // Rocket thrust
+    if (input.yaxis > 0.0) && (rocket.fuel > 0.0) {
+        rocket_thrust(rocket, dt);
     }
 }
 
-fn player_thrust(rocket: &mut Actor, dt: f32) {
+fn rocket_thrust(rocket: &mut Actor, dt: f32) {
     let direction_vector = vec_from_angle(rocket.facing);
-    let thrust_vector = direction_vector * (PLAYER_THRUST);
+    let thrust_vector = direction_vector * (ROCKET_THRUST);
 
     rocket.velocity += thrust_vector * (dt);
+
+    if rocket.fuel > 0.0 {
+        rocket.fuel -= 1.0;
+    }
 }
 
 fn update_actor_position(rocket: &mut Actor, dt: f32) {
@@ -141,19 +130,17 @@ fn check_collision(rocket: &mut Actor, ground: graphics::Rect, ctx: &mut Context
 }
 
 struct Assets {
-    player_image: graphics::Image,
+    rocket_sprite: graphics::Image,
 }
 
 impl Assets {
     fn new(ctx: &mut Context) -> GameResult<Assets> {
-        let player_image = graphics::Image::from_path(ctx, "/rocket.png")?;
-        Ok(Assets {player_image })
+        let rocket_sprite = graphics::Image::from_path(ctx, "/rocket.png")?;
+        Ok(Assets {rocket_sprite })
     }
 
-    fn actor_image(&self, actor: &Actor) -> &graphics::Image {
-        match actor.tag {
-            ActorType::Player => &self.player_image,
-        }
+    fn rocket_image(&self) -> &graphics::Image {
+        &self.rocket_sprite
     }
 }
 
@@ -186,7 +173,8 @@ struct MainState {
     assets: Assets,
     input: InputState,
     ground_rect: Rect,
-    player_velocity_text: Text
+    rocket_velocity_text: Text,
+    rocket_fuel_text: Text
 }
 
 impl MainState {
@@ -197,21 +185,20 @@ impl MainState {
             1.0, 
             1.0,
             1);
-
-
         let player = create_player();
         let assets = Assets::new(ctx)?;
-        let ground_rect = graphics::Rect::new(0.0, 580.0, 600.0, 20.0);
-        
-        let player_velocity_text = graphics::Text::new(format!("{}", 0));
-        
+        let ground_rect = graphics::Rect::new(0.0, 580.0, 800.0, 20.0);
+        let rocket_velocity_text = graphics::Text::new(format!("{}", 0));
+        let rocket_fuel_text= graphics::Text::new(format!("{}", ROCKET_FUEL));
+
         let s = MainState {
             screen,
             player,
             assets,
             input: InputState::default(),
             ground_rect,
-            player_velocity_text
+            rocket_velocity_text,
+            rocket_fuel_text
         };
 
         Ok(s)
@@ -228,6 +215,9 @@ impl EventHandler for MainState {
         // println!("PLAYER POS X: {}", self.player.pos.x);
         // println!("PLAYER POS Y: {}", self.player.pos.y);
 
+
+        // Deciding when to update the game, and how many times.
+        // Run once for each frame fitting in the time since the last update.
         while ctx.time.check_update_time(DESIRED_FPS) {
             let seconds = GRAVITY_ACCELERATION / (DESIRED_FPS as f32);
             
@@ -241,7 +231,10 @@ impl EventHandler for MainState {
             check_collision(&mut self.player, self.ground_rect, ctx);
 
             // Update player velocity text every frame
-            self.player_velocity_text = graphics::Text::new(format!("{}", self.player.velocity.y));
+            self.rocket_velocity_text = graphics::Text::new(format!("{}", self.player.velocity.y));
+
+            // Update rocket fuel
+            self.rocket_fuel_text = graphics::Text::new(format!("{:?}", self.player.fuel));
         }
 
         Ok(())
@@ -251,15 +244,14 @@ impl EventHandler for MainState {
         // Draw Canvas
         let mut canvas = graphics::Canvas::from_screen_image(ctx, &mut self.screen, Color::BLACK);
 
-        // Loop over all objects
-        {
-            let assets = &mut self.assets;
 
-            let p = &self.player;
-            draw_actor(assets, &mut canvas, p);
+        // Draw Player
+        let assets = &mut self.assets;
+        let player = &self.player;
+        draw_actor(assets, &mut canvas, player);
+        
 
-        }
-
+        // Draw Ground
         // Create mesh for the ground
         let ground_mesh = graphics::Mesh::new_rectangle(
             ctx,
@@ -268,31 +260,45 @@ impl EventHandler for MainState {
             graphics::Color::WHITE,
         )?;
         
+
         // Drawing ground
-        let draw_param = graphics::DrawParam::default().dest(Vec2::ZERO);
+        let draw_param = graphics::DrawParam::default()
+            .dest(Vec2::ZERO);
+
         canvas.draw(
             &ground_mesh,
             draw_param
         );
         
+        
+        // Draw Rocket velocity text
+        let velocity_text_pos = ggez::glam::Vec2::new(SCREEN_SIZE.x * 0.5, 40.0);
 
-
-        // Rocket velocity text
-        let score_pos = ggez::glam::Vec2::new(SCREEN_SIZE.x * 0.5, 40.0);
-
-        self.player_velocity_text.set_scale(PxScale::from(40.0));
+        self.rocket_velocity_text.set_scale(PxScale::from(40.0));
 
         let draw_param = graphics::DrawParam::default()
-            .dest(score_pos)
+            .dest(velocity_text_pos)
             .color(ggez::graphics::Color::WHITE);
 
         canvas.draw(
-            &self.player_velocity_text, 
+            &self.rocket_velocity_text, 
             draw_param
         );
 
 
+        // Draw Rocket fuel text
+        let fuel_text_pos = ggez::glam::Vec2::new(0.0, 300.0);
 
+        self.rocket_fuel_text.set_scale(PxScale::from(40.0));
+
+        let draw_param = graphics::DrawParam::default()
+            .dest(fuel_text_pos)
+            .color(ggez::graphics::Color::WHITE);
+
+        canvas.draw(
+            &self.rocket_fuel_text, 
+            draw_param
+        );
 
 
         canvas.finish(ctx)?;
@@ -336,17 +342,17 @@ impl EventHandler for MainState {
     }
 }
 
-
-
 pub fn main() -> GameResult {
     // Access resource folder
-    let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
-        let mut path = path::PathBuf::from(manifest_dir);
-        path.push("resources");
-        path
-    } else {
-        path::PathBuf::from("./resources")
-    };
+    let resource_dir = 
+        if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+            let mut path = path::PathBuf::from(manifest_dir);
+            path.push("resources");
+
+            path
+        } else {
+            path::PathBuf::from("./resources")
+        };
 
     // Setup metadata about our game
     let cb = ContextBuilder::new("rocket-game", "Thiago")
