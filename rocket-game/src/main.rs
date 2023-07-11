@@ -191,7 +191,14 @@ struct MainState {
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        let screen = graphics::ScreenImage::new(ctx, graphics::ImageFormat::Rgba8UnormSrgb, 1., 1., 1);
+        let screen = graphics::ScreenImage::new(
+            ctx, 
+            graphics::ImageFormat::Rgba8UnormSrgb, 
+            1.0, 
+            1.0,
+            1);
+
+
         let player = create_player();
         let assets = Assets::new(ctx)?;
         let ground_rect = graphics::Rect::new(0.0, 580.0, 600.0, 20.0);
