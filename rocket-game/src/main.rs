@@ -178,7 +178,7 @@ impl Default for InputState {
 
 // **********************************************************************
 // MainState is our game's "global" state
-// Keeps track of everything we need for actually running the game.
+// Keeps track of everything we need for running the game.
 // **********************************************************************
 struct MainState {
     screen: graphics::ScreenImage,
@@ -348,6 +348,7 @@ pub fn main() -> GameResult {
         path::PathBuf::from("./resources")
     };
 
+    // Setup metadata about our game
     let cb = ContextBuilder::new("rocket-game", "Thiago")
         .window_setup(conf::WindowSetup::default()
             .title("Rocket Game!"))
@@ -359,5 +360,6 @@ pub fn main() -> GameResult {
 
     let game_state = MainState::new(&mut ctx)?;
 
+    // Run our game, passing in our context and state.
     event::run(ctx, events_loop, game_state)
 }
