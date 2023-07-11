@@ -1,7 +1,7 @@
 use ggez::conf;
 use ggez::event::{self, EventHandler};
 use ggez::glam::*;
-use ggez::graphics::{self, Color, Rect};
+use ggez::graphics::{self, Color, Rect, PxScale, Text};
 use ggez::input::keyboard::KeyCode;
 use ggez::{Context, ContextBuilder, GameResult};
 use ggez::input::keyboard::KeyInput;
@@ -17,9 +17,9 @@ type Vector2 = Vec2;
 // Player Consts
 // **********************************************************************
 // Acceleration in pixels per second.
-const PLAYER_THRUST: f32 = 100.0;
+const PLAYER_THRUST: f32 = 50.0;
 // Rotation in radians per second.
-const PLAYER_TURN_RATE: f32 = 3.0;
+const PLAYER_TURN_RATE: f32 = 1.5;
 // Player Box size
 const PLAYER_BBOX: Vec2 = Vec2::new(37.0, 64.0);
 
@@ -90,8 +90,8 @@ fn create_player() -> Actor {
         pos: SCREEN_SIZE * 0.5,
         facing: 0.,
         velocity: Vector2::ZERO,
-        // ang_vel: 0.,
-        // bbox_size: PLAYER_BBOX,
+        
+        // Rect object stays "inside" player sprite to check collisions
         rect: Rect::new(0.0, 0.0, PLAYER_BBOX.x, PLAYER_BBOX.y)
     }
 }
@@ -121,6 +121,7 @@ fn update_actor_position(rocket: &mut Actor, dt: f32) {
 
     rocket.pos += rocket.velocity * dt;
 
+    // Update rect position that stays "inside" the rocket
     rocket.rect.x = rocket.pos.x - rocket.rect.w / 2.0;
     rocket.rect.y = rocket.pos.y - rocket.rect.h / 2.0;
 }
@@ -184,25 +185,26 @@ struct MainState {
     player: Actor,
     assets: Assets,
     input: InputState,
-    ground_rect: Rect
+    ground_rect: Rect,
+    player_velocity_text: Text
 }
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        let assets = Assets::new(ctx)?;
+        let screen = graphics::ScreenImage::new(ctx, graphics::ImageFormat::Rgba8UnormSrgb, 1., 1., 1);
         let player = create_player();
-        
+        let assets = Assets::new(ctx)?;
         let ground_rect = graphics::Rect::new(0.0, 580.0, 600.0, 20.0);
-
-        let screen =
-            graphics::ScreenImage::new(ctx, graphics::ImageFormat::Rgba8UnormSrgb, 1., 1., 1);
-
+        
+        let player_velocity_text = graphics::Text::new(format!("{}", 0));
+        
         let s = MainState {
             screen,
             player,
             assets,
             input: InputState::default(),
-            ground_rect
+            ground_rect,
+            player_velocity_text
         };
 
         Ok(s)
@@ -227,10 +229,12 @@ impl EventHandler for MainState {
 
             // Update the physics for player
             update_actor_position(&mut self.player, seconds);
-            
-            // wrap_actor_position(&mut self.player, self.screen_width, self.screen_height);
 
+            // Check rocket collision with the ground rect
             check_collision(&mut self.player, self.ground_rect, ctx);
+
+            // Update player velocity text every frame
+            self.player_velocity_text = graphics::Text::new(format!("{}", self.player.velocity.y));
         }
 
         Ok(())
@@ -249,7 +253,7 @@ impl EventHandler for MainState {
 
         }
 
-        // Create mesh for the pad
+        // Create mesh for the ground
         let ground_mesh = graphics::Mesh::new_rectangle(
             ctx,
             graphics::DrawMode::fill(),
@@ -257,12 +261,32 @@ impl EventHandler for MainState {
             graphics::Color::WHITE,
         )?;
         
-        // Drawing pads
+        // Drawing ground
         let draw_param = graphics::DrawParam::default().dest(Vec2::ZERO);
         canvas.draw(
             &ground_mesh,
             draw_param
         );
+        
+
+
+        // Rocket velocity text
+        let score_pos = ggez::glam::Vec2::new(SCREEN_SIZE.x * 0.5, 40.0);
+
+        self.player_velocity_text.set_scale(PxScale::from(40.0));
+
+        let draw_param = graphics::DrawParam::default()
+            .dest(score_pos)
+            .color(ggez::graphics::Color::WHITE);
+
+        canvas.draw(
+            &self.player_velocity_text, 
+            draw_param
+        );
+
+
+
+
 
         canvas.finish(ctx)?;
 
