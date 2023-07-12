@@ -1,4 +1,5 @@
-use ggez::{Context, ContextBuilder, GameResult};
+use ggez::audio::SoundSource;
+use ggez::{Context, ContextBuilder, GameResult, audio};
 use ggez::conf;
 use ggez::event::{self, EventHandler};
 use ggez::glam::Vec2;
@@ -21,7 +22,6 @@ const ROCKET_TURN_RATE: f32 = 1.5;
 // Player Box size
 const ROCKET_BBOX: Vec2 = Vec2::new(37.0, 64.0);
 
-
 // **********************************************************************
 // Game Generic Consts
 // **********************************************************************
@@ -29,15 +29,6 @@ const DESIRED_FPS: u32 = 60;
 const SCREEN_SIZE: Vec2 = Vec2::new(800.0, 600.0);
 const MAX_IMPACT_VELOCITY: f32 = 75.0;
 const GRAVITY_ACCELERATION: f32 = 3.0;
-
-#[derive(Debug)]
-struct Actor {
-    pos: Vec2,
-    facing: f32,
-    velocity: Vec2,
-    fuel: f32,
-    rect: Rect
-}
 
 // **********************************************************************
 // Utility functions.
@@ -52,12 +43,12 @@ fn vec_from_angle(angle: f32) -> Vec2 {
 // Draw actor
 fn draw_actor(assets: &mut Assets, canvas: &mut graphics::Canvas, actor: &Actor) {
     let pos = actor.pos;
-
+    
     let image = assets.rocket_image();
 
     let drawparams = graphics::DrawParam::new()
-        .dest(pos)
-        .rotation(actor.facing)
+    .dest(pos)
+    .rotation(actor.facing)
         .offset(Vec2::new(0.5, 0.5));
 
     // Draw on screen
@@ -87,7 +78,7 @@ fn player_handle_input(rocket: &mut Actor, input: &InputState, dt: f32) {
     // Rocket rotation
     rocket.facing += dt * ROCKET_TURN_RATE * input.xaxis;
     rocket.facing = rocket.facing % (2.0 * PI);
-
+    
     // Rocket thrust
     if (input.yaxis > 0.0) && (rocket.fuel > 0.0) {
         rocket_thrust(rocket, dt);
@@ -101,7 +92,7 @@ fn rocket_thrust(rocket: &mut Actor, dt: f32) {
     rocket.velocity += thrust_vector * (dt);
 
     if rocket.fuel > 0.0 {
-        rocket.fuel -= 1.0;
+        rocket.fuel -= 0.5;
     }
 }
 
@@ -109,34 +100,49 @@ fn update_actor_position(rocket: &mut Actor, dt: f32) {
     rocket.velocity.y += 10.0 * dt;
 
     rocket.pos += rocket.velocity * dt;
-
+    
     // Update rect position that stays "inside" the rocket
     rocket.rect.x = rocket.pos.x - rocket.rect.w / 2.0;
     rocket.rect.y = rocket.pos.y - rocket.rect.h / 2.0;
 }
 
-fn check_collision(rocket: &mut Actor, ground: graphics::Rect, ctx: &mut Context) {
+fn check_collision(rocket: &mut Actor, ground: graphics::Rect, ctx: &mut Context, assets: &mut Assets) {
     if ground.overlaps(&rocket.rect) {
+        
+        if rocket.velocity.length() >= MAX_IMPACT_VELOCITY {     
 
-        if rocket.velocity.length() >= MAX_IMPACT_VELOCITY {
-                println!("Game over!");
-                ctx.request_quit();
+            //assets.hit_sound.play(ctx);
+
+            println!("Game over!");
+            ctx.request_quit();
         }
-
+        
         rocket.velocity.y *= -0.5;
         rocket.velocity.x *= 0.99;
         rocket.pos.y = ground.y - rocket.rect.h / 2.0;
     }
 }
 
+#[derive(Debug)]
+struct Actor {
+    pos: Vec2,
+    facing: f32,
+    velocity: Vec2,
+    fuel: f32,
+    rect: Rect
+}
+
 struct Assets {
     rocket_sprite: graphics::Image,
+    hit_sound: audio::Source
 }
 
 impl Assets {
     fn new(ctx: &mut Context) -> GameResult<Assets> {
         let rocket_sprite = graphics::Image::from_path(ctx, "/rocket.png")?;
-        Ok(Assets {rocket_sprite })
+        let hit_sound = audio::Source::new(ctx, "/boom.ogg")?;
+
+        Ok(Assets {rocket_sprite, hit_sound})
     }
 
     fn rocket_image(&self) -> &graphics::Image {
@@ -228,13 +234,17 @@ impl EventHandler for MainState {
             update_actor_position(&mut self.player, seconds);
 
             // Check rocket collision with the ground rect
-            check_collision(&mut self.player, self.ground_rect, ctx);
+            check_collision(&mut self.player, self.ground_rect, ctx, &mut self.assets);
+            //self.assets.hit_sound.play(ctx);
 
-            // Update player velocity text every frame
-            self.rocket_velocity_text = graphics::Text::new(format!("{}", self.player.velocity.y));
 
             // Update rocket fuel
-            self.rocket_fuel_text = graphics::Text::new(format!("{:?}", self.player.fuel));
+            self.rocket_fuel_text = graphics::Text::new(format!("{:.2?}", self.player.fuel));
+
+            // Update player velocity
+            let mut mag = (self.player.velocity.x.powi(2)) + (self.player.velocity.y.powi(2));
+            mag = mag.sqrt();
+            self.rocket_velocity_text = graphics::Text::new(format!("{:.2}", mag));
         }
 
         Ok(())
@@ -245,11 +255,13 @@ impl EventHandler for MainState {
         let mut canvas = graphics::Canvas::from_screen_image(ctx, &mut self.screen, Color::BLACK);
 
 
+
         // Draw Player
         let assets = &mut self.assets;
         let player = &self.player;
         draw_actor(assets, &mut canvas, player);
         
+
 
         // Draw Ground
         // Create mesh for the ground
@@ -261,6 +273,7 @@ impl EventHandler for MainState {
         )?;
         
 
+
         // Drawing ground
         let draw_param = graphics::DrawParam::default()
             .dest(Vec2::ZERO);
@@ -270,11 +283,19 @@ impl EventHandler for MainState {
             draw_param
         );
         
-        
-        // Draw Rocket velocity text
-        let velocity_text_pos = ggez::glam::Vec2::new(SCREEN_SIZE.x * 0.5, 40.0);
 
-        self.rocket_velocity_text.set_scale(PxScale::from(40.0));
+        let text_size = PxScale::from(24.0);
+
+        // ****************************
+        // Draw rocket velocity
+        // ****************************
+        let velocity_text_pos = ggez::glam::Vec2::new(0.0, 270.0);
+        let velocity_text_pos_2 = ggez::glam::Vec2::new(0.0, 250.0);
+
+        // **************
+        // Velocity Number
+        // **************
+        self.rocket_velocity_text.set_scale(text_size);
 
         let draw_param = graphics::DrawParam::default()
             .dest(velocity_text_pos)
@@ -285,11 +306,33 @@ impl EventHandler for MainState {
             draw_param
         );
 
+        // **************
+        // Velocity Text
+        // **************
+        let mut velocity_text = graphics::Text::new(format!("Velocity:"));
+        velocity_text.set_scale(text_size);
 
-        // Draw Rocket fuel text
-        let fuel_text_pos = ggez::glam::Vec2::new(0.0, 300.0);
+        let draw_param = graphics::DrawParam::default()
+            .dest(velocity_text_pos_2)
+            .color(ggez::graphics::Color::WHITE);
 
-        self.rocket_fuel_text.set_scale(PxScale::from(40.0));
+        canvas.draw(
+            &velocity_text, 
+            draw_param
+        );
+
+
+
+        // ****************************
+        // Draw Rocket fuel
+        // ****************************
+        let fuel_text_pos = ggez::glam::Vec2::new(0.0, 340.0);
+        let fuel_text_pos_2 = ggez::glam::Vec2::new(0.0, 320.0);
+
+        // **************
+        // Fuel Number
+        // **************
+        self.rocket_fuel_text.set_scale(text_size);
 
         let draw_param = graphics::DrawParam::default()
             .dest(fuel_text_pos)
@@ -300,9 +343,24 @@ impl EventHandler for MainState {
             draw_param
         );
 
+        // **************
+        // Fuel Text
+        // **************
+        let mut fuel_text = graphics::Text::new(format!("Fuel:"));
+        fuel_text.set_scale(text_size);
+
+        let draw_param = graphics::DrawParam::default()
+            .dest(fuel_text_pos_2)
+            .color(ggez::graphics::Color::WHITE);
+
+        canvas.draw(
+            &fuel_text, 
+            draw_param
+        );
+
+
 
         canvas.finish(ctx)?;
-
         ctx.gfx.present(&self.screen.image(ctx))?;
 
         Ok(())
