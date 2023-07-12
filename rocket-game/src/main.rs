@@ -6,7 +6,8 @@ use ggez::glam::Vec2;
 use ggez::graphics::{self, Color, Rect, PxScale, Text};
 use ggez::input::keyboard::{KeyCode, KeyInput};
 
-use std::env;
+use core::time;
+use std::{env, thread};
 use std::f32::consts::PI;
 use std::path;
 
@@ -111,13 +112,15 @@ fn check_collision(rocket: &mut Actor, ground: graphics::Rect, ctx: &mut Context
         
         if rocket.velocity.length() >= MAX_IMPACT_VELOCITY {     
 
-            //assets.hit_sound.play(ctx);
+            let _ = assets.hit_sound.play(ctx);
+            
+            let duration = time::Duration::from_secs(1);
+            thread::sleep(duration);
 
-            println!("Game over!");
             ctx.request_quit();
         }
         
-        rocket.velocity.y *= -0.5;
+        rocket.velocity.y *= -0.15;
         rocket.velocity.x *= 0.99;
         rocket.pos.y = ground.y - rocket.rect.h / 2.0;
     }
@@ -235,8 +238,6 @@ impl EventHandler for MainState {
 
             // Check rocket collision with the ground rect
             check_collision(&mut self.player, self.ground_rect, ctx, &mut self.assets);
-            //self.assets.hit_sound.play(ctx);
-
 
             // Update rocket fuel
             self.rocket_fuel_text = graphics::Text::new(format!("{:.2?}", self.player.fuel));
