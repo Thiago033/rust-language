@@ -363,7 +363,6 @@ impl EventHandler for MainState {
         // ****************************
         // Draw Fuel Collectable
         // ****************************
-
         // If Fuel object remains on the vector:
         if self.objects_vec.iter().any(|x| matches!(x.tag, ObjectType::Fuel)) {
 
@@ -446,10 +445,7 @@ impl EventHandler for MainState {
             .dest(fuel_text_pos)
             .color(ggez::graphics::Color::WHITE);
 
-        canvas.draw(
-            &self.rocket_fuel_text, 
-            draw_param
-        );
+        canvas.draw(&self.rocket_fuel_text, draw_param);
 
         // **************
         // Fuel Text
@@ -461,10 +457,7 @@ impl EventHandler for MainState {
             .dest(fuel_text_pos_2)
             .color(ggez::graphics::Color::WHITE);
 
-        canvas.draw(
-            &fuel_text, 
-            draw_param
-        );
+        canvas.draw(&fuel_text, draw_param);
 
 
 
