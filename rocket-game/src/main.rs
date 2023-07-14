@@ -7,6 +7,7 @@ use ggez::graphics::{self, Color, Rect, PxScale, Text};
 use ggez::input::keyboard::{KeyCode, KeyInput};
 
 use core::time;
+use std::iter::Iterator;
 use std::{env, thread};
 use std::f32::consts::PI;
 use std::path;
@@ -17,7 +18,7 @@ use std::path;
 // Acceleration in pixels per second.
 const ROCKET_THRUST: f32 = 50.0;
 // Rocket fuel
-const ROCKET_FUEL: f32 = 100.0;
+const ROCKET_FUEL: f32 = 10000.0;
 // Rotation in radians per second.
 const ROCKET_TURN_RATE: f32 = 1.5;
 // Player Box size
@@ -27,7 +28,7 @@ const ROCKET_BBOX: Vec2 = Vec2::new(37.0, 64.0);
 // Game Generic Consts
 // **********************************************************************
 const DESIRED_FPS: u32 = 60;
-const SCREEN_SIZE: Vec2 = Vec2::new(800.0, 600.0);
+const SCREEN_SIZE: Vec2 = Vec2::new(1600.0, 900.0);
 const MAX_IMPACT_VELOCITY: f32 = 75.0;
 const GRAVITY_ACCELERATION: f32 = 3.0;
 
@@ -42,18 +43,63 @@ fn vec_from_angle(angle: f32) -> Vec2 {
 }
 
 // Draw actor
-fn draw_actor(assets: &mut Assets, canvas: &mut graphics::Canvas, actor: &Actor) {
-    let pos = actor.pos;
-    
-    let image = assets.rocket_image();
+fn draw_rocket(assets: &mut Assets, canvas: &mut graphics::Canvas, actor: &Actor) {
+    let image = assets.rocket_sprite();
 
     let drawparams = graphics::DrawParam::new()
-    .dest(pos)
-    .rotation(actor.facing)
+        .dest(actor.pos)
+        .rotation(actor.facing)
         .offset(Vec2::new(0.5, 0.5));
 
-    // Draw on screen
     canvas.draw(image, drawparams);
+}
+
+fn draw_fuel(assets: &mut Assets, canvas: &mut graphics::Canvas, fuel_rect: Rect) {
+    let image = assets.fuel_sprite();
+    
+    let fuel_pos = Vec2::new(fuel_rect.x, fuel_rect.y);
+    let drawparams = graphics::DrawParam::new().dest(fuel_pos);
+
+    canvas.draw(image, drawparams);
+}
+
+enum ObjectType {
+    CheckpointGround,
+    Ground,
+    Fuel
+}
+
+struct Objects {
+    rect: Rect,
+    tag: ObjectType
+}
+
+
+fn create_objects() -> Vec<Objects> {
+    let mut objects_vec:Vec<Objects> = Vec::new();
+    
+    // Draw the walls and ground on map
+    let ground_rect =  Objects {
+        rect: graphics::Rect::new(50.0, 580.0, 100.0, 20.0),
+        tag: ObjectType::Ground
+    };
+
+    let checkpoint_ground_rect =  Objects {
+        rect: graphics::Rect::new(1450.0, 580.0, 100.0, 20.0),
+        tag: ObjectType::CheckpointGround
+    };
+
+    let fuel_rect = Objects {
+        rect: graphics::Rect::new(700.0, 300.0, 64.0, 64.0),
+        tag: ObjectType::Fuel
+    };
+
+    objects_vec.push(ground_rect);
+    objects_vec.push(checkpoint_ground_rect);
+    objects_vec.push(fuel_rect);
+
+    objects_vec
+
 }
 
 // **********************************************************************
@@ -62,8 +108,8 @@ fn draw_actor(assets: &mut Assets, canvas: &mut graphics::Canvas, actor: &Actor)
 // Create PLayer
 fn create_player() -> Actor {
     Actor {
-        pos: SCREEN_SIZE * 0.5,
-        facing: 0.,
+        pos: Vec2::new(100.0, 400.0),
+        facing: 0.0,
         velocity: Vec2::ZERO,
         fuel: ROCKET_FUEL,
         
@@ -97,7 +143,7 @@ fn rocket_thrust(rocket: &mut Actor, dt: f32) {
     }
 }
 
-fn update_actor_position(rocket: &mut Actor, dt: f32) {
+fn update_player_position(rocket: &mut Actor, dt: f32) {
     rocket.velocity.y += 10.0 * dt;
 
     rocket.pos += rocket.velocity * dt;
@@ -105,25 +151,6 @@ fn update_actor_position(rocket: &mut Actor, dt: f32) {
     // Update rect position that stays "inside" the rocket
     rocket.rect.x = rocket.pos.x - rocket.rect.w / 2.0;
     rocket.rect.y = rocket.pos.y - rocket.rect.h / 2.0;
-}
-
-fn check_collision(rocket: &mut Actor, ground: graphics::Rect, ctx: &mut Context, assets: &mut Assets) {
-    if ground.overlaps(&rocket.rect) {
-        
-        if rocket.velocity.length() >= MAX_IMPACT_VELOCITY {     
-
-            let _ = assets.hit_sound.play(ctx);
-            
-            let duration = time::Duration::from_secs(1);
-            thread::sleep(duration);
-
-            ctx.request_quit();
-        }
-        
-        rocket.velocity.y *= -0.15;
-        rocket.velocity.x *= 0.99;
-        rocket.pos.y = ground.y - rocket.rect.h / 2.0;
-    }
 }
 
 #[derive(Debug)]
@@ -137,19 +164,25 @@ struct Actor {
 
 struct Assets {
     rocket_sprite: graphics::Image,
+    fuel_sprite: graphics::Image,
     hit_sound: audio::Source
 }
 
 impl Assets {
     fn new(ctx: &mut Context) -> GameResult<Assets> {
         let rocket_sprite = graphics::Image::from_path(ctx, "/rocket.png")?;
+        let fuel_sprite = graphics::Image::from_path(ctx, "/fuel.png")?;
         let hit_sound = audio::Source::new(ctx, "/boom.ogg")?;
 
-        Ok(Assets {rocket_sprite, hit_sound})
+        Ok(Assets {rocket_sprite, fuel_sprite, hit_sound})
     }
 
-    fn rocket_image(&self) -> &graphics::Image {
+    fn rocket_sprite(&self) -> &graphics::Image {
         &self.rocket_sprite
+    }
+
+    fn fuel_sprite(&self) -> &graphics::Image {
+        &self.fuel_sprite
     }
 }
 
@@ -181,9 +214,11 @@ struct MainState {
     player: Actor,
     assets: Assets,
     input: InputState,
-    ground_rect: Rect,
+
+    objects_vec: Vec<Objects>,
+
     rocket_velocity_text: Text,
-    rocket_fuel_text: Text
+    rocket_fuel_text: Text,
 }
 
 impl MainState {
@@ -196,7 +231,9 @@ impl MainState {
             1);
         let player = create_player();
         let assets = Assets::new(ctx)?;
-        let ground_rect = graphics::Rect::new(0.0, 580.0, 800.0, 20.0);
+
+        let objects_vec = create_objects();
+        
         let rocket_velocity_text = graphics::Text::new(format!("{}", 0));
         let rocket_fuel_text= graphics::Text::new(format!("{}", ROCKET_FUEL));
 
@@ -205,12 +242,69 @@ impl MainState {
             player,
             assets,
             input: InputState::default(),
-            ground_rect,
+
+            objects_vec,
+
             rocket_velocity_text,
             rocket_fuel_text
         };
 
         Ok(s)
+    }
+
+    fn check_collision(&mut self, ctx: &mut ggez::Context) {
+        let duration = time::Duration::from_secs(1);
+        
+        // *****************************
+        // Collision with walls/ground
+        // *****************************
+        for object in &self.objects_vec {
+            if object.rect.overlaps(&self.player.rect) {
+                // *****************************
+                // Ground Collision
+                // *****************************
+                if matches!(object.tag, ObjectType::Ground | ObjectType::CheckpointGround) {
+                    // Checks impact velocity
+                    if self.player.velocity.length() >= MAX_IMPACT_VELOCITY {     
+                        let _ = self.assets.hit_sound.play(ctx);
+                        thread::sleep(duration);
+                        ctx.request_quit();
+                    }
+
+                    // Checks collision with checkpoint ground
+                    if matches!(object.tag, ObjectType::CheckpointGround) {
+                        println!("You Won!");
+                        thread::sleep(duration);
+                        ctx.request_quit();
+                    };
+
+                    // Update some physics
+                    self.player.velocity.y *= -0.15;
+                    self.player.velocity.x *= 0.99;
+                    self.player.pos.y = self.objects_vec[0].rect.y - self.player.rect.h / 2.0;
+                }
+
+                // *****************************
+                // Walls Collision
+                // *****************************
+                // if matches!(object.tag, ObjectType::Wall) {
+
+                // }
+            }
+        }
+
+        // *****************************
+        // Collision with fuel
+        // *****************************
+        self.objects_vec.retain(|object| {
+            let should_keep = !object.rect.overlaps(&self.player.rect) || !matches!(object.tag, ObjectType::Fuel);
+    
+            if !should_keep {
+                self.player.fuel += 1000.0;
+            }
+    
+            should_keep
+        });
     }
 }
 
@@ -234,10 +328,10 @@ impl EventHandler for MainState {
             player_handle_input(&mut self.player, &self.input, seconds);
 
             // Update the physics for player
-            update_actor_position(&mut self.player, seconds);
+            update_player_position(&mut self.player, seconds);
 
-            // Check rocket collision with the ground rect
-            check_collision(&mut self.player, self.ground_rect, ctx, &mut self.assets);
+            // Check rocket collision with objects
+            self.check_collision(ctx);
 
             // Update rocket fuel
             self.rocket_fuel_text = graphics::Text::new(format!("{:.2?}", self.player.fuel));
@@ -255,37 +349,56 @@ impl EventHandler for MainState {
         // Draw Canvas
         let mut canvas = graphics::Canvas::from_screen_image(ctx, &mut self.screen, Color::BLACK);
 
+        let text_size = PxScale::from(24.0);
 
-
+        // ****************************
         // Draw Player
+        // ****************************
         let assets = &mut self.assets;
         let player = &self.player;
-        draw_actor(assets, &mut canvas, player);
-        
+        draw_rocket(assets, &mut canvas, player);
 
 
-        // Draw Ground
-        // Create mesh for the ground
-        let ground_mesh = graphics::Mesh::new_rectangle(
-            ctx,
-            graphics::DrawMode::fill(),
-            self.ground_rect,
-            graphics::Color::WHITE,
-        )?;
-        
+
+        // ****************************
+        // Draw Fuel Collectable
+        // ****************************
+
+        // If Fuel object remains on the vector:
+        if self.objects_vec.iter().any(|x| matches!(x.tag, ObjectType::Fuel)) {
+
+            // Find fuel object index, inside objects vector
+            let fuel_index = self.objects_vec.iter().position(|x| matches!(x.tag, ObjectType::Fuel) ).unwrap();
+            let fuel_rect = &self.objects_vec[fuel_index];
+            
+            draw_fuel(assets, &mut canvas, fuel_rect.rect)
+        }
 
 
-        // Drawing ground
-        let draw_param = graphics::DrawParam::default()
-            .dest(Vec2::ZERO);
 
-        canvas.draw(
-            &ground_mesh,
-            draw_param
-        );
-        
+        // ****************************
+        // Draw Grounds
+        // ****************************
+        for object in &self.objects_vec {
+            // Checks if object is a ground or wall object
+            // (To not draw the fuel object for example)
+            if matches!(object.tag, ObjectType::Ground | ObjectType::CheckpointGround) {
 
-        let text_size = PxScale::from(24.0);
+                let object_mesh = graphics::Mesh::new_rectangle(
+                    ctx,
+                    graphics::DrawMode::fill(),
+                    object.rect,
+                    graphics::Color::WHITE,
+                )?;
+    
+                // Drawing ground
+                let draw_param = graphics::DrawParam::default();
+    
+                canvas.draw(&object_mesh, draw_param);
+            }
+        }
+
+
 
         // ****************************
         // Draw rocket velocity
@@ -302,10 +415,7 @@ impl EventHandler for MainState {
             .dest(velocity_text_pos)
             .color(ggez::graphics::Color::WHITE);
 
-        canvas.draw(
-            &self.rocket_velocity_text, 
-            draw_param
-        );
+        canvas.draw(&self.rocket_velocity_text,  draw_param);
 
         // **************
         // Velocity Text
@@ -317,10 +427,7 @@ impl EventHandler for MainState {
             .dest(velocity_text_pos_2)
             .color(ggez::graphics::Color::WHITE);
 
-        canvas.draw(
-            &velocity_text, 
-            draw_param
-        );
+        canvas.draw(&velocity_text,  draw_param);
 
 
 
@@ -418,7 +525,7 @@ pub fn main() -> GameResult {
         .window_setup(conf::WindowSetup::default()
             .title("Rocket Game!"))
         .window_mode(conf::WindowMode::default()
-            .dimensions(800.0, 600.0))
+            .dimensions(SCREEN_SIZE.x, SCREEN_SIZE.y))
         .add_resource_path(resource_dir);
 
     let (mut ctx, events_loop) = cb.build()?;
