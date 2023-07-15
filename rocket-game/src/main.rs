@@ -16,13 +16,12 @@ use std::path;
 // Player Consts
 // **********************************************************************
 // Acceleration in pixels per second.
-const ROCKET_THRUST: f32 = 50.0;
-// Rocket fuel
-const ROCKET_FUEL: f32 = 10000.0;
+const ROCKET_THRUST: f32 = 25.0;
 // Rotation in radians per second.
 const ROCKET_TURN_RATE: f32 = 1.5;
 // Player Box size
 const ROCKET_BBOX: Vec2 = Vec2::new(37.0, 64.0);
+const ROCKET_FUEL: f32 = 10000.0;
 
 // **********************************************************************
 // Game Generic Consts
@@ -32,40 +31,13 @@ const SCREEN_SIZE: Vec2 = Vec2::new(1600.0, 900.0);
 const MAX_IMPACT_VELOCITY: f32 = 75.0;
 const GRAVITY_ACCELERATION: f32 = 3.0;
 
-// **********************************************************************
-// Utility functions.
-// **********************************************************************
-// Create a unit vector representing the given angle (in radians)
-fn vec_from_angle(angle: f32) -> Vec2 {
-    let x = angle.sin();
-    let y = angle.cos();
-    Vec2::new(x, -y)
-}
-
-// Draw actor
-fn draw_rocket(assets: &mut Assets, canvas: &mut graphics::Canvas, actor: &Actor) {
-    let image = assets.rocket_sprite();
-
-    let drawparams = graphics::DrawParam::new()
-        .dest(actor.pos)
-        .rotation(actor.facing)
-        .offset(Vec2::new(0.5, 0.5));
-
-    canvas.draw(image, drawparams);
-}
-
-fn draw_fuel(assets: &mut Assets, canvas: &mut graphics::Canvas, fuel_rect: Rect) {
-    let image = assets.fuel_sprite();
-    
-    let fuel_pos = Vec2::new(fuel_rect.x, fuel_rect.y);
-    let drawparams = graphics::DrawParam::new().dest(fuel_pos);
-
-    canvas.draw(image, drawparams);
-}
-
+// **************************
+// Creating objects
+// **************************
 enum ObjectType {
     CheckpointGround,
     Ground,
+    Wall,
     Fuel
 }
 
@@ -73,7 +45,6 @@ struct Objects {
     rect: Rect,
     tag: ObjectType
 }
-
 
 fn create_objects() -> Vec<Objects> {
     let mut objects_vec:Vec<Objects> = Vec::new();
@@ -89,25 +60,195 @@ fn create_objects() -> Vec<Objects> {
         tag: ObjectType::CheckpointGround
     };
 
+    let wall_checkpoint_rect =  Objects {
+        rect: graphics::Rect::new(1449.0, 582.0, 102.0, 318.0),
+        tag: ObjectType::Wall
+    };
+
+    let wall_1_rect =  Objects {
+        rect: graphics::Rect::new(320.0, 300.0, 20.0, 600.0),
+        tag: ObjectType::Wall
+    };
+
+    let wall_2_rect =  Objects {
+        rect: graphics::Rect::new(580.0, 0.0, 20.0, 600.0),
+        tag: ObjectType::Wall
+    };
+
+    let wall_3_rect =  Objects {
+        rect: graphics::Rect::new(1020.0, 0.0, 20.0, 600.0),
+        tag: ObjectType::Wall
+    };
+
+    let wall_4_rect =  Objects {
+        rect: graphics::Rect::new(1280.0, 300.0, 20.0, 600.0),
+        tag: ObjectType::Wall
+    };
+
+    // Mid wall
+    let wall_5_rect =  Objects {
+        rect: graphics::Rect::new(800.0, 300.0, 20.0, 600.0),
+        tag: ObjectType::Wall
+    };
+
     let fuel_rect = Objects {
-        rect: graphics::Rect::new(700.0, 300.0, 64.0, 64.0),
+        rect: graphics::Rect::new(768.0, 100.0, 64.0, 64.0),
         tag: ObjectType::Fuel
     };
 
     objects_vec.push(ground_rect);
+
     objects_vec.push(checkpoint_ground_rect);
+
+    objects_vec.push(wall_checkpoint_rect);
+
+    objects_vec.push(wall_1_rect);
+    objects_vec.push(wall_2_rect);
+    objects_vec.push(wall_3_rect);
+    objects_vec.push(wall_4_rect);
+    objects_vec.push(wall_5_rect);
+
     objects_vec.push(fuel_rect);
 
     objects_vec
-
 }
 
-// **********************************************************************
+
+
+// **************************
+// Draw Functions
+// **************************
+fn draw_rocket(assets: &mut Assets, canvas: &mut graphics::Canvas, actor: &Player) {
+    let image = assets.rocket_sprite();
+
+    let drawparams = graphics::DrawParam::new()
+        .dest(actor.pos)
+        .rotation(actor.facing)
+        .offset(Vec2::new(0.5, 0.5));
+
+    canvas.draw(image, drawparams);
+}
+
+fn draw_objects(ctx: &mut Context, canvas: &mut graphics::Canvas, assets: &Assets, objects_vec: &Vec<Objects>) -> GameResult{
+    for object in objects_vec {
+        // ****************************
+        // Draw CheckPoint Ground
+        // ****************************
+        if matches!(object.tag, ObjectType::CheckpointGround) {
+            let object_mesh = graphics::Mesh::new_rectangle(
+                ctx,
+                graphics::DrawMode::fill(),
+                object.rect,
+                graphics::Color::MAGENTA,
+            )?;
+
+            // Drawing ground
+            let draw_param = graphics::DrawParam::default();
+            canvas.draw(&object_mesh, draw_param);
+        }
+
+        // ****************************
+        // Draw Ground
+        // ****************************
+        // Checks if object is a ground object
+        if matches!(object.tag, ObjectType::Ground) {
+            let object_mesh = graphics::Mesh::new_rectangle(
+                ctx,
+                graphics::DrawMode::fill(),
+                object.rect,
+                graphics::Color::WHITE,
+            )?;
+
+            // Drawing ground
+            let draw_param = graphics::DrawParam::default();
+            canvas.draw(&object_mesh, draw_param);
+        }
+
+        // ****************************
+        // Draw Walls
+        // ****************************
+        // Checks if object is wall object
+        if matches!(object.tag, ObjectType::Wall) {
+            let object_mesh = graphics::Mesh::new_rectangle(
+                ctx,
+                graphics::DrawMode::fill(),
+                object.rect,
+                graphics::Color::WHITE,
+            )?;
+
+            // Drawing wall
+            let draw_param = graphics::DrawParam::default();
+            canvas.draw(&object_mesh, draw_param);
+        }
+
+        // ****************************
+        // Draw Fuel Collectable
+        // ****************************
+        if objects_vec.iter().any(|x| matches!(x.tag, ObjectType::Fuel)) {
+            // Find fuel object index, inside objects vector
+            let fuel_index = objects_vec.iter().position(|x| matches!(x.tag, ObjectType::Fuel) ).unwrap();
+            let fuel_rect = &objects_vec[fuel_index];
+            
+            let image = assets.fuel_sprite();
+    
+            let fuel_pos = Vec2::new(fuel_rect.rect.x, fuel_rect.rect.y);
+            let drawparams = graphics::DrawParam::new().dest(fuel_pos);
+        
+            canvas.draw(image, drawparams);
+        }
+    }
+
+    Ok(())
+}
+
+
+
+// **************************
+// Utility functions
+// **************************
+// Create a unit vector representing the given angle (in radians)
+fn vec_from_angle(angle: f32) -> Vec2 {
+    let x = angle.sin();
+    let y = angle.cos();
+    Vec2::new(x, -y)
+}
+
+fn move_wall_func(move_wall: &mut bool, objects_vec: &mut Vec<Objects>) {
+    if objects_vec[7].rect.y == 300.0 {
+        *move_wall = true;
+    }
+
+    if objects_vec[7].rect.y == 600.0 {
+        *move_wall = false;
+    }
+
+    if *move_wall {
+        objects_vec[4].rect.y -= 1.0;
+        objects_vec[5].rect.y -= 1.0;
+        objects_vec[7].rect.y += 1.0;
+    } else {
+        objects_vec[4].rect.y += 1.0;
+        objects_vec[5].rect.y += 1.0;
+        objects_vec[7].rect.y -= 1.0;
+    }
+}
+
+
+// ****************************************************
 // Player functions
-// **********************************************************************
+// ****************************************************
+#[derive(Debug)]
+struct Player {
+    pos: Vec2,
+    facing: f32,
+    velocity: Vec2,
+    fuel: f32,
+    rect: Rect
+}
+
 // Create PLayer
-fn create_player() -> Actor {
-    Actor {
+fn create_player() -> Player {
+    Player {
         pos: Vec2::new(100.0, 400.0),
         facing: 0.0,
         velocity: Vec2::ZERO,
@@ -121,7 +262,7 @@ fn create_player() -> Actor {
 // **************************
 // Rocket Physics
 // **************************
-fn player_handle_input(rocket: &mut Actor, input: &InputState, dt: f32) {
+fn player_handle_input(rocket: &mut Player, input: &InputState, dt: f32) {
     // Rocket rotation
     rocket.facing += dt * ROCKET_TURN_RATE * input.xaxis;
     rocket.facing = rocket.facing % (2.0 * PI);
@@ -132,7 +273,7 @@ fn player_handle_input(rocket: &mut Actor, input: &InputState, dt: f32) {
     }
 }
 
-fn rocket_thrust(rocket: &mut Actor, dt: f32) {
+fn rocket_thrust(rocket: &mut Player, dt: f32) {
     let direction_vector = vec_from_angle(rocket.facing);
     let thrust_vector = direction_vector * (ROCKET_THRUST);
 
@@ -143,7 +284,7 @@ fn rocket_thrust(rocket: &mut Actor, dt: f32) {
     }
 }
 
-fn update_player_position(rocket: &mut Actor, dt: f32) {
+fn update_player_position(rocket: &mut Player, dt: f32) {
     rocket.velocity.y += 10.0 * dt;
 
     rocket.pos += rocket.velocity * dt;
@@ -153,15 +294,14 @@ fn update_player_position(rocket: &mut Actor, dt: f32) {
     rocket.rect.y = rocket.pos.y - rocket.rect.h / 2.0;
 }
 
-#[derive(Debug)]
-struct Actor {
-    pos: Vec2,
-    facing: f32,
-    velocity: Vec2,
-    fuel: f32,
-    rect: Rect
-}
 
+
+// **********************************************************************
+// So that was the real meat of our game.  Now we just need a structure
+// to contain the images, sounds, etc. that we need to hang on to; this
+// is our "asset management system".  All the file names and such are
+// just hard-coded.
+// **********************************************************************
 struct Assets {
     rocket_sprite: graphics::Image,
     fuel_sprite: graphics::Image,
@@ -186,6 +326,8 @@ impl Assets {
     }
 }
 
+
+
 // **********************************************************************
 // Keeps track of the user's input state 
 // Turn keyboard events into state-based commands
@@ -205,20 +347,21 @@ impl Default for InputState {
     }
 }
 
+
+
 // **********************************************************************
 // MainState is our game's "global" state
 // Keeps track of everything we need for running the game.
 // **********************************************************************
 struct MainState {
     screen: graphics::ScreenImage,
-    player: Actor,
+    player: Player,
     assets: Assets,
     input: InputState,
-
     objects_vec: Vec<Objects>,
-
     rocket_velocity_text: Text,
     rocket_fuel_text: Text,
+    move_wall: bool
 }
 
 impl MainState {
@@ -231,22 +374,25 @@ impl MainState {
             1);
         let player = create_player();
         let assets = Assets::new(ctx)?;
-
         let objects_vec = create_objects();
-        
         let rocket_velocity_text = graphics::Text::new(format!("{}", 0));
         let rocket_fuel_text= graphics::Text::new(format!("{}", ROCKET_FUEL));
+
+
+
+        let move_wall: bool = true;
+
+
 
         let s = MainState {
             screen,
             player,
             assets,
             input: InputState::default(),
-
             objects_vec,
-
             rocket_velocity_text,
-            rocket_fuel_text
+            rocket_fuel_text,
+            move_wall
         };
 
         Ok(s)
@@ -278,7 +424,7 @@ impl MainState {
                         ctx.request_quit();
                     };
 
-                    // Update some physics
+                    // Update physics
                     self.player.velocity.y *= -0.15;
                     self.player.velocity.x *= 0.99;
                     self.player.pos.y = self.objects_vec[0].rect.y - self.player.rect.h / 2.0;
@@ -287,9 +433,11 @@ impl MainState {
                 // *****************************
                 // Walls Collision
                 // *****************************
-                // if matches!(object.tag, ObjectType::Wall) {
-
-                // }
+                if matches!(object.tag, ObjectType::Wall) {
+                    let _ = self.assets.hit_sound.play(ctx);
+                    thread::sleep(duration);
+                    ctx.request_quit();
+                }
             }
         }
 
@@ -317,7 +465,6 @@ impl EventHandler for MainState {
         //PRINT PLAYER POSITION
         // println!("PLAYER POS X: {}", self.player.pos.x);
         // println!("PLAYER POS Y: {}", self.player.pos.y);
-
 
         // Deciding when to update the game, and how many times.
         // Run once for each frame fitting in the time since the last update.
@@ -349,55 +496,22 @@ impl EventHandler for MainState {
         // Draw Canvas
         let mut canvas = graphics::Canvas::from_screen_image(ctx, &mut self.screen, Color::BLACK);
 
-        let text_size = PxScale::from(24.0);
-
         // ****************************
         // Draw Player
         // ****************************
-        let assets = &mut self.assets;
-        let player = &self.player;
-        draw_rocket(assets, &mut canvas, player);
-
-
+        draw_rocket(&mut self.assets, &mut canvas, &self.player);
 
         // ****************************
-        // Draw Fuel Collectable
+        // Draw Objects
         // ****************************
-        // If Fuel object remains on the vector:
-        if self.objects_vec.iter().any(|x| matches!(x.tag, ObjectType::Fuel)) {
+        let _ = draw_objects(ctx, &mut canvas, &self.assets, &self.objects_vec);
 
-            // Find fuel object index, inside objects vector
-            let fuel_index = self.objects_vec.iter().position(|x| matches!(x.tag, ObjectType::Fuel) ).unwrap();
-            let fuel_rect = &self.objects_vec[fuel_index];
-            
-            draw_fuel(assets, &mut canvas, fuel_rect.rect)
-        }
+        move_wall_func(&mut self.move_wall, &mut self.objects_vec);
 
-
-
-        // ****************************
-        // Draw Grounds
-        // ****************************
-        for object in &self.objects_vec {
-            // Checks if object is a ground or wall object
-            // (To not draw the fuel object for example)
-            if matches!(object.tag, ObjectType::Ground | ObjectType::CheckpointGround) {
-
-                let object_mesh = graphics::Mesh::new_rectangle(
-                    ctx,
-                    graphics::DrawMode::fill(),
-                    object.rect,
-                    graphics::Color::WHITE,
-                )?;
-    
-                // Drawing ground
-                let draw_param = graphics::DrawParam::default();
-    
-                canvas.draw(&object_mesh, draw_param);
-            }
-        }
-
-
+        // ********************************************************
+        // Draw Texts
+        // ********************************************************
+        let text_size = PxScale::from(24.0);
 
         // ****************************
         // Draw rocket velocity
@@ -461,6 +575,9 @@ impl EventHandler for MainState {
 
 
 
+        // ****************************
+        // Finish Drawing
+        // ****************************
         canvas.finish(ctx)?;
         ctx.gfx.present(&self.screen.image(ctx))?;
 
