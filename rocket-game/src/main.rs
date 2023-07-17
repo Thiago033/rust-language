@@ -440,7 +440,8 @@ struct MainState {
     objects_vec: Vec<Objects>,
     rocket_velocity_text: Text,
     rocket_fuel_text: Text,
-    move_wall: bool
+    move_wall: bool,
+    game_end: bool,
 }
 
 impl MainState {
@@ -457,6 +458,7 @@ impl MainState {
         let rocket_velocity_text = Text::new(format!("{}", 0));
         let rocket_fuel_text= Text::new(format!("{}", ROCKET_FUEL));
         let move_wall: bool = true;
+        let game_end: bool = false;
 
         let s = MainState {
             screen,
@@ -466,17 +468,31 @@ impl MainState {
             objects_vec,
             rocket_velocity_text,
             rocket_fuel_text,
-            move_wall
+            move_wall,
+            game_end,
         };
 
         Ok(s)
     }
 
     fn check_collision(&mut self, ctx: &mut ggez::Context) {
-        let duration = time::Duration::from_secs(1);
-        
+
+
         // **********************************************************************
-        // Collision with walls/ground
+        // Collision with screen bounds
+        // **********************************************************************
+        if self.player.pos.x > SCREEN_SIZE.x || self.player.pos.x < 0.0 {
+            let _ = self.assets.hit_sound.play(ctx);
+            self.game_end = true;
+        };
+
+        if self.player.pos.y > SCREEN_SIZE.y || self.player.pos.y < 0.0{
+            let _ = self.assets.hit_sound.play(ctx);
+            self.game_end = true;
+        };
+
+        // **********************************************************************
+        // Collision with objects
         // **********************************************************************
         for object in &self.objects_vec {
             if object.rect.overlaps(&self.player.rect) {
@@ -484,19 +500,13 @@ impl MainState {
                 // Ground Collision
                 // ***********************************
                 if matches!(object.tag, ObjectType::Ground | ObjectType::CheckpointGround) {
-                    // Checks impact velocity
-                    if self.player.velocity.length() >= MAX_IMPACT_VELOCITY {     
+                    // Checks impact velocity and rocket facing
+                    if (self.player.velocity.length() >= MAX_IMPACT_VELOCITY) ||
+                       ((self.player.facing.abs() > 1.0) && (self.player.facing.abs() < 5.0))
+                    { 
                         let _ = self.assets.hit_sound.play(ctx);
-                        thread::sleep(duration);
-                        ctx.request_quit();
+                        self.game_end = true;
                     }
-
-                    // Checks collision with checkpoint ground
-                    if matches!(object.tag, ObjectType::CheckpointGround) {
-                        println!("You Won!");
-                        thread::sleep(duration);
-                        ctx.request_quit();
-                    };
 
                     // Update physics
                     self.player.velocity.y *= -0.15;
@@ -504,13 +514,17 @@ impl MainState {
                     self.player.pos.y = self.objects_vec[0].rect.y - self.player.rect.h / 2.0;
                 }
 
+                // Checks collision with checkpoint ground
+                if matches!(object.tag, ObjectType::CheckpointGround) {
+                    self.game_end = true;
+                };
+
                 // ***********************************
                 // Walls Collision
                 // ***********************************
                 if matches!(object.tag, ObjectType::Wall | ObjectType::CheckpointWall) {
                     let _ = self.assets.hit_sound.play(ctx);
-                    thread::sleep(duration);
-                    ctx.request_quit();
+                    self.game_end = true;
                 }
             }
         }
@@ -546,9 +560,10 @@ impl MainState {
 // **********************************************************************
 impl EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        //PRINT PLAYER POSITION
+        // PRINT PLAYER POSITION
         // println!("PLAYER POS X: {}", self.player.pos.x);
         // println!("PLAYER POS Y: {}", self.player.pos.y);
+        // println!("PLAYER FACING ANG: {}", self.player.facing);
 
         // Deciding when to update the game, and how many times.
         // Run once for each frame fitting in the time since the last update.
@@ -563,11 +578,16 @@ impl EventHandler for MainState {
 
             // Check rocket collision with objects
             self.check_collision(ctx);
+            if self.game_end {
+                let duration = time::Duration::from_secs(1);
+                thread::sleep(duration);
+                ctx.request_quit();
+            }
 
             // Moving Walls
             move_wall_func(&mut self.move_wall, &mut self.objects_vec);
 
-            // Update rocket fuel
+            // Update rocket fuel text
             self.rocket_fuel_text = Text::new(format!("{:.2?}", self.player.fuel));
 
             // Update player velocity
@@ -718,7 +738,7 @@ pub fn main() -> GameResult {
     // Setup metadata about our game
     let cb = ContextBuilder::new("rocket-game", "Thiago")
         .window_setup(conf::WindowSetup::default()
-            .title("Rocket Game!"))
+            .title("Rocket Game"))
         .window_mode(conf::WindowMode::default()
             .dimensions(SCREEN_SIZE.x, SCREEN_SIZE.y))
         .add_resource_path(resource_dir);
