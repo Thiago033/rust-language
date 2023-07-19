@@ -41,12 +41,12 @@ use ggez::input::keyboard::{KeyCode, KeyInput};
 // Player Consts
 // **********************************************************************
 // Acceleration in pixels per second.
-const ROCKET_THRUST: f32 = 30.0;
+const ROCKET_THRUST: f32 = 250.0;
 // Rotation in radians per second.
-const ROCKET_TURN_RATE: f32 = 1.2;
+const ROCKET_TURN_RATE: f32 = 2.0;
 // Player Box size
 const ROCKET_BBOX: Vec2 = Vec2::new(37.0, 64.0);
-const ROCKET_FUEL: f32 = 100.0;
+const ROCKET_FUEL: f32 = 1000.0;
 const ROCKET_FUEL_CONSUPTION: f32 = 0.12;
 
 // **********************************************************************
@@ -54,8 +54,10 @@ const ROCKET_FUEL_CONSUPTION: f32 = 0.12;
 // **********************************************************************
 const DESIRED_FPS: u32 = 60;
 const SCREEN_SIZE: Vec2 = Vec2::new(1600.0, 900.0);
-const MAX_IMPACT_VELOCITY: f32 = 30.0;
-const GRAVITY_ACCELERATION: f32 = 3.0;
+const MAX_IMPACT_VELOCITY: f32 = 300000.0;
+
+// Acceleration in pixels per second.
+const GRAVITY_ACCELERATION: f32 = 100.0;
 
 
 
@@ -350,7 +352,7 @@ struct Player {
 // **********************************
 fn create_player() -> Player {
     Player {
-        pos: Vec2::new(100.0, 530.0),
+        pos: Vec2::new(100.0, 0.0),
         facing: 0.0,
         velocity: Vec2::ZERO,
         fuel: ROCKET_FUEL,
@@ -386,7 +388,8 @@ fn rocket_thrust(rocket: &mut Player, dt: f32) {
 }
 
 fn update_player_position(rocket: &mut Player, dt: f32) {
-    rocket.velocity.y += 10.0 * dt;
+    // Gravity Pull
+    rocket.velocity.y += GRAVITY_ACCELERATION * dt;
 
     rocket.pos += rocket.velocity * dt;
     
@@ -568,13 +571,13 @@ impl EventHandler for MainState {
         // Deciding when to update the game, and how many times.
         // Run once for each frame fitting in the time since the last update.
         while ctx.time.check_update_time(DESIRED_FPS) {
-            let seconds = GRAVITY_ACCELERATION / (DESIRED_FPS as f32);
+            let dt = 1.0 / (DESIRED_FPS as f32);
             
             // Update the player state based on the user input.
-            player_handle_input(&mut self.player, &self.input, seconds);
+            player_handle_input(&mut self.player, &self.input, dt);
 
             // Update the physics for player
-            update_player_position(&mut self.player, seconds);
+            update_player_position(&mut self.player, dt);
 
             // Check rocket collision with objects
             self.check_collision(ctx);
