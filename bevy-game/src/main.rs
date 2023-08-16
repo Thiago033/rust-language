@@ -40,4 +40,11 @@ fn setup(
         material: materials.add(ColorMaterial::from(Color::PURPLE)),
         ..default()
     });
+
+    commands.spawn(MaterialMesh2dBundle {
+        mesh: meshes.add(Mesh::from(shape::Circle::default())).into(),
+        transform: Transform::default().with_scale(Vec3::new(50.0, 50.0, 0.0)),
+        material: materials.add(ColorMaterial::from(Color::BLACK)),
+        ..default()
+    });
 }
