@@ -1,8 +1,9 @@
 use std::{
     fs, 
     error::Error,
-    env
 };
+
+use dotenv::dotenv;
 
 pub struct Config {
     pub query: String,
@@ -18,8 +19,12 @@ impl Config {
 
         let query = args[1].clone();
         let file_name = args[2].clone();
+        
+        dotenv().ok();
 
-        let case_sensitive = env::var("CASE_INSENSITIVE").is_err();
+        let env_key = std::env::var("CASE_SENSITIVE").expect("CASE_SENSITIVE must be set.");
+        
+        let case_sensitive = if env_key == "true" { true } else { false };
     
         Ok(Config { query, file_name, case_sensitive })
     }
@@ -78,8 +83,8 @@ mod tests {
         let contents = 
         "\
             Test: this is a test
-            safe, fast, productive.
-            trust theree.
+            safe, fast, productive, TeSt.
+            test theree.
         ";
 
         assert_eq!(vec!["Test: this is a test"], search(query, contents));

@@ -8,7 +8,7 @@
             "type": "lldb",
             "request": "launch",
             "name": "Debug",
-            "program": "C:\\Repositorio\\rust-language\\tutorial017\\target\\debug\\tutorial017.exe",
+            "program": "C:\\Repositorio\\rust-language\\minigrep\\target\\debug\\minigrep.exe",
             "args": [],
             "cwd": "${workspaceFolder}"
         }
