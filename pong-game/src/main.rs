@@ -1,6 +1,6 @@
 use ggez::{Context, GameResult, ContextBuilder};
 use ggez::event;
-use ggez::graphics::{self, Drawable, PxScale};
+use ggez::graphics::{self, PxScale};
 use ggez::glam::Vec2;
 use ggez::input::keyboard::{KeyCode, KeyInput};
 
@@ -57,7 +57,7 @@ struct MainState {
 }
 
 impl MainState {
-    pub fn new(ctx: &mut Context) -> Self {
+    pub fn new(_ctx: &mut Context) -> Self {
 
         let mut ball_velocity = ggez::glam::Vec2::new(0.0, 0.0);
         random_ball_vec(&mut ball_velocity, BALL_SPEED, BALL_SPEED);
